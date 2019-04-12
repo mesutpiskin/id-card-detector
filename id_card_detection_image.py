@@ -15,7 +15,7 @@ from utils import visualization_utils as vis_util
 
 # Name of the directory containing the object detection module we're using
 MODEL_NAME = 'model'
-IMAGE_NAME = 'test_images/image1.jpg'
+IMAGE_NAME = 'test_images/image1.png'
 
 # Grab path to current working directory
 CWD_PATH = os.getcwd()
@@ -94,6 +94,7 @@ vis_util.visualize_boxes_and_labels_on_image_array(
     min_score_thresh=0.60)
 
 # All the results have been drawn on image. Now display the image.
+
 cv2.imshow('ID CARD DETECTOR', image)
 
 # Press any key to close the image
