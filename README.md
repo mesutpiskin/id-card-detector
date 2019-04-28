@@ -30,6 +30,12 @@ tested on python 3x
 - numpy
 - opencv
 
+to install requirements
+
+```bash
+ pip3 install -r requirements.txt
+ ```
+ 
 Runs the application with the default webcam.
 
 ```python
