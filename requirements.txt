@@ -77,7 +77,7 @@ moviepy==0.2.3.5
 nbconvert==5.3.1
 nbformat==4.4.0
 networkx==2.2
-notebook==5.6.0
+notebook==5.7.8
 numpy==1.15.1
 object-detection==0.1
 opencv-python==3.4.2.17
