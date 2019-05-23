@@ -106,7 +106,7 @@ PyWavelets==1.0.1
 PyYAML==3.13
 pyzmq==17.1.2
 qtconsole==4.4.1
-requests==2.19.1
+requests==2.20.0
 requests-toolbelt==0.8.0
 scikit-image==0.14.2
 scikit-learn==0.20.2
