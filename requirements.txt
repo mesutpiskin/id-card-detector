@@ -131,7 +131,7 @@ tornado==5.1
 tqdm==4.30.0
 traitlets==4.3.2
 ujson==1.35
-urllib3==1.23
+urllib3==1.24.2
 virtualenv==16.3.0
 virtualenv-clone==0.5.3
 watermark==1.8.1
