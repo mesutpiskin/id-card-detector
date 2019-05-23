@@ -103,7 +103,7 @@ python-dateutil==2.7.3
 pytz==2018.5
 PyVirtualDisplay==0.2.1
 PyWavelets==1.0.1
-PyYAML==3.13
+PyYAML==5.1
 pyzmq==17.1.2
 qtconsole==4.4.1
 requests==2.19.1
