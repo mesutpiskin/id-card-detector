@@ -137,7 +137,7 @@ virtualenv-clone==0.5.3
 watermark==1.8.1
 wcwidth==0.1.7
 webencodings==0.5.1
-Werkzeug==0.14.1
+Werkzeug==0.15.3
 widgetsnbextension==3.4.0
 wrapt==1.10.11
 yarg==0.1.9
