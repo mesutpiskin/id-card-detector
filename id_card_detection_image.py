@@ -6,6 +6,8 @@ import numpy as np
 import tensorflow as tf
 import sys
 
+from PIL import Image
+
 # This is needed since the notebook is stored in the object_detection folder.
 sys.path.append("..")
 
@@ -82,19 +84,32 @@ image_expanded = np.expand_dims(image, axis=0)
     feed_dict={image_tensor: image_expanded})
 
 # Draw the results of the detection (aka 'visulaize the results')
-
-vis_util.visualize_boxes_and_labels_on_image_array(
+image, array_coord = vis_util.visualize_boxes_and_labels_on_image_array(
     image,
     np.squeeze(boxes),
     np.squeeze(classes).astype(np.int32),
     np.squeeze(scores),
     category_index,
     use_normalized_coordinates=True,
-    line_thickness=8,
+    line_thickness=3,
     min_score_thresh=0.60)
 
-# All the results have been drawn on image. Now display the image.
+ymin, xmin, ymax, xmax = array_coord
 
+shape = np.shape(image)
+im_width, im_height = shape[1], shape[0]
+(left, right, top, bottom) = (xmin * im_width, xmax * im_width, ymin * im_height, ymax * im_height)
+
+# Using Image to crop and save the extracted copied image
+im = Image.open(image_path)
+im.crop((left, top, right, bottom)).save(output_path, quality=95)
+
+cv2.imshow('ID-CARD-DETECTOR : ', image)
+
+image_cropped = cv2.imread(output_path)
+cv2.imshow("ID-CARD-CROPPED : ", image_cropped)
+
+# All the results have been drawn on image. Now display the image.
 cv2.imshow('ID CARD DETECTOR', image)
 
 # Press any key to close the image

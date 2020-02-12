@@ -675,6 +675,9 @@ def visualize_boxes_and_labels_on_image_array(
   Returns:
     uint8 numpy array with shape (img_height, img_width, 3) with overlaid boxes.
   """
+  # Coordinates
+  ymin, xmin, ymax, xmax = 0, 0, 0, 0
+
   # Create a display string (and color) for every box location, group any boxes
   # that correspond to the same location.
   box_to_display_str_map = collections.defaultdict(list)
@@ -750,7 +753,7 @@ def visualize_boxes_and_labels_on_image_array(
           radius=line_thickness / 2,
           use_normalized_coordinates=use_normalized_coordinates)
 
-  return image
+  return image, [ymin, xmin, ymax, xmax]
 
 
 def add_cdf_image_summary(values, name):
