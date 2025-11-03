@@ -71,10 +71,11 @@ def draw_boxes(image, boxes, classes, scores, category_index, min_score, line_th
 MODEL_NAME = 'model'
 
 # CLI args (modern)
-parser = argparse.ArgumentParser(description='ID Card Detection (TF2 SavedModel + optional OCR)')
+parser = argparse.ArgumentParser(description='ID Card Detection (TF2 SavedModel or YOLO + optional OCR)')
 parser.add_argument('--image', type=str, default=None, help='Absolute or relative path to image file')
 parser.add_argument('--min_score', type=float, default=0.60, help='Minimum score threshold (0-1)')
 parser.add_argument('--ocr', action='store_true', help='Run OCR on cropped ROI')
+parser.add_argument('--yolo_model', type=str, default=None, help='YOLO model path/name (e.g., yolov8n.pt)')
 args = parser.parse_args()
 
 # Grab path to current working directory
@@ -99,36 +100,58 @@ NUM_CLASSES = 1
 
 # Label map already parsed into CATEGORY_INDEX
 
-# Load TF2 SavedModel
-detect_module = tf.saved_model.load(PATH_TO_SAVED_MODEL)
-infer = detect_module.signatures.get('serving_default', None)
-if infer is None:
-    # Fallback: ilk imzayı kullan
-    infer = next(iter(detect_module.signatures.values()))
+use_yolo = args.yolo_model is not None
+if not use_yolo:
+    # Load TF2 SavedModel
+    detect_module = tf.saved_model.load(PATH_TO_SAVED_MODEL)
+    infer = detect_module.signatures.get('serving_default', None)
+    if infer is None:
+        infer = next(iter(detect_module.signatures.values()))
+else:
+    from ultralytics import YOLO
+    yolo = YOLO(args.yolo_model)
 
 # Define input and run detection with TF2
 
-# Load image and run detection (TF2)
+# Load image and run detection
 image = cv2.imread(PATH_TO_IMAGE)
 if image is None:
     raise FileNotFoundError('Image not found: {}'.format(PATH_TO_IMAGE))
-input_tensor = tf.convert_to_tensor(np.expand_dims(image, axis=0), dtype=tf.uint8)
+if not use_yolo:
+    input_tensor = tf.convert_to_tensor(np.expand_dims(image, axis=0), dtype=tf.uint8)
+    # Signature input key
+    _, sig_kwargs = infer.structured_input_signature
+    input_keys = list(sig_kwargs.keys())
+    if not input_keys:
+        raise RuntimeError('SavedModel signature has no inputs')
+    input_key = input_keys[0]
 
-# İmzanın beklediği girdi anahtarını tespit et
-_, sig_kwargs = infer.structured_input_signature
-input_keys = list(sig_kwargs.keys())
-if not input_keys:
-    raise RuntimeError('SavedModel signature has no inputs')
-input_key = input_keys[0]
-
-outputs = infer(**{input_key: input_tensor})
-boxes = outputs['detection_boxes'][0].numpy()
-scores = outputs['detection_scores'][0].numpy()
-classes = outputs.get('detection_classes', None)
-if classes is not None:
-    classes = classes[0].numpy().astype(np.int32)
+    outputs = infer(**{input_key: input_tensor})
+    boxes = outputs['detection_boxes'][0].numpy()
+    scores = outputs['detection_scores'][0].numpy()
+    classes = outputs.get('detection_classes', None)
+    if classes is not None:
+        classes = classes[0].numpy().astype(np.int32)
+    else:
+        classes = np.ones((boxes.shape[0],), dtype=np.int32)
 else:
-    classes = np.ones((boxes.shape[0],), dtype=np.int32)
+    # YOLO inference
+    res = yolo.predict(source=image, verbose=False)[0]
+    if res.boxes is not None and len(res.boxes) > 0:
+        xyxy = res.boxes.xyxy.cpu().numpy()
+        conf = res.boxes.conf.cpu().numpy()
+        cls = res.boxes.cls.cpu().numpy().astype(np.int32)
+        h, w = image.shape[:2]
+        boxes = []
+        for x1, y1, x2, y2 in xyxy:
+            boxes.append([y1 / h, x1 / w, y2 / h, x2 / w])
+        boxes = np.array(boxes, dtype=np.float32)
+        scores = conf
+        classes = cls + 1
+    else:
+        boxes = np.zeros((0, 4), dtype=np.float32)
+        scores = np.zeros((0,), dtype=np.float32)
+        classes = np.zeros((0,), dtype=np.int32)
 
 min_thresh = args.min_score
 array_coord = draw_boxes(

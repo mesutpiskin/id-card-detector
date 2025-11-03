@@ -15,3 +15,6 @@ easyocr==1.7.1
 # Utils (if needed)
 # tensorflow-hub, etc.
 
+# Optional detector backend (YOLO)
+ultralytics>=8.3.0
+
