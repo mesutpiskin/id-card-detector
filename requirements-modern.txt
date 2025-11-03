@@ -1,0 +1,17 @@
+# Modern environment (CPU). Install TensorFlow separately depending on your platform:
+# - Apple Silicon:   pip install tensorflow-macos==2.20.0 tensorflow-metal==1.2.0
+# - Intel mac/Linux: pip install tensorflow==2.20.0
+
+opencv-python>=4.8.0
+numpy>=1.23.0,<2
+Pillow>=9.5.0
+matplotlib>=3.7.0
+protobuf>=3.20.0
+absl-py>=1.4.0
+
+# OCR
+easyocr==1.7.1
+
+# Utils (if needed)
+# tensorflow-hub, etc.
+

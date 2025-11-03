@@ -1,0 +1,12 @@
+# Intel macOS / Linux / Windows CPU full install (includes TensorFlow)
+tensorflow==2.20.0
+
+# Common deps
+opencv-python>=4.8.0
+numpy>=1.23.0,<2
+Pillow>=9.5.0
+matplotlib>=3.7.0
+protobuf>=3.20.0
+absl-py>=1.4.0
+easyocr==1.7.1
+
