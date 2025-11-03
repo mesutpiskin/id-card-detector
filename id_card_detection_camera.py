@@ -58,9 +58,11 @@ def draw_boxes(image, boxes, classes, scores, category_index, min_score, line_th
 MODEL_NAME = 'model'
 
 # CLI
-parser = argparse.ArgumentParser(description='ID Card Detection (camera)')
+parser = argparse.ArgumentParser(description='ID Card Detection (camera, TF2 or YOLO)')
 parser.add_argument('--camera', type=int, default=0, help='Camera index (default 0)')
 parser.add_argument('--min_score', type=float, default=0.50, help='Minimum score threshold (0-1)')
+parser.add_argument('--yolo_model', type=str, default=None, help='YOLO model path/name (e.g., yolov8n.pt)')
+parser.add_argument('--ocr', action='store_true', help='Enable OCR on selected snapshots (1-9 keys)')
 args = parser.parse_args()
 
 # Grab path to current working directory
@@ -78,42 +80,90 @@ NUM_CLASSES = 1
 category_index = parse_labelmap(PATH_TO_LABELS)
 
 # Load TF2 SavedModel (serving_default)
-detect_module = tf.saved_model.load(PATH_TO_SAVED_MODEL)
-infer = detect_module.signatures.get('serving_default', None)
-if infer is None:
-    infer = next(iter(detect_module.signatures.values()))
+use_yolo = args.yolo_model is not None
+if not use_yolo:
+    detect_module = tf.saved_model.load(PATH_TO_SAVED_MODEL)
+    infer = detect_module.signatures.get('serving_default', None)
+    if infer is None:
+        infer = next(iter(detect_module.signatures.values()))
+    _, sig_kwargs = infer.structured_input_signature
+    input_keys = list(sig_kwargs.keys())
+    if not input_keys:
+        raise RuntimeError('SavedModel signature has no inputs')
+    input_key = input_keys[0]
+else:
+    from ultralytics import YOLO
+    yolo = YOLO(args.yolo_model)
 
 
-_, sig_kwargs = infer.structured_input_signature
-input_keys = list(sig_kwargs.keys())
-if not input_keys:
-    raise RuntimeError('SavedModel signature has no inputs')
-input_key = input_keys[0]
+
+
+def open_camera(index: int):
+    cam = cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
+    if not cam.isOpened():
+        cam = cv2.VideoCapture(index)
+    cam.set(3,1280)
+    cam.set(4,720)
+    return cam
+
+def close_camera(cam):
+    try:
+        cam.release()
+    except Exception:
+        pass
 
 # Initialize webcam feed (prefer AVFoundation on macOS)
-video = cv2.VideoCapture(args.camera, cv2.CAP_AVFOUNDATION)
-if not video.isOpened():
-    video = cv2.VideoCapture(args.camera)
-video.set(3,1280)
-video.set(4,720)
+video = open_camera(args.camera)
+is_paused = False
+last_frame = None
+ocr_text_lines = []  # last OCR output to display on panel
 
 min_score_thresh = args.min_score
 while True:
 
     # Acquire frame and expand frame dimensions to have shape: [1, None, None, 3]
     # i.e. a single-column array, where each item in the column has the pixel RGB value
-    ret, frame = video.read()
-    if not ret:
-        continue
-    input_tensor = tf.convert_to_tensor(np.expand_dims(frame, axis=0), dtype=tf.uint8)
-    outputs = infer(**{input_key: input_tensor})
-    boxes = outputs['detection_boxes'][0].numpy()
-    scores = outputs['detection_scores'][0].numpy()
-    classes = outputs.get('detection_classes', None)
-    if classes is not None:
-        classes = classes[0].numpy().astype(np.int32)
+    if not is_paused:
+        ret, frame = video.read()
+        if not ret:
+            continue
+        last_frame = frame.copy()
     else:
-        classes = np.ones((boxes.shape[0],), dtype=np.int32)
+        # When paused, reuse last frame if available
+        if last_frame is None:
+            ret, frame = video.read()
+            if not ret:
+                continue
+            last_frame = frame.copy()
+        else:
+            frame = last_frame.copy()
+    if not use_yolo:
+        input_tensor = tf.convert_to_tensor(np.expand_dims(frame, axis=0), dtype=tf.uint8)
+        outputs = infer(**{input_key: input_tensor})
+        boxes = outputs['detection_boxes'][0].numpy()
+        scores = outputs['detection_scores'][0].numpy()
+        classes = outputs.get('detection_classes', None)
+        if classes is not None:
+            classes = classes[0].numpy().astype(np.int32)
+        else:
+            classes = np.ones((boxes.shape[0],), dtype=np.int32)
+    else:
+        res = yolo.predict(source=frame, verbose=False)[0]
+        if res.boxes is not None and len(res.boxes) > 0:
+            xyxy = res.boxes.xyxy.cpu().numpy()
+            conf = res.boxes.conf.cpu().numpy()
+            cls = res.boxes.cls.cpu().numpy().astype(np.int32)
+            h, w = frame.shape[:2]
+            boxes = []
+            for x1, y1, x2, y2 in xyxy:
+                boxes.append([y1 / h, x1 / w, y2 / h, x2 / w])
+            boxes = np.array(boxes, dtype=np.float32)
+            scores = conf
+            classes = cls + 1
+        else:
+            boxes = np.zeros((0, 4), dtype=np.float32)
+            scores = np.zeros((0,), dtype=np.float32)
+            classes = np.zeros((0,), dtype=np.int32)
 
     draw_boxes(
         frame,
@@ -125,11 +175,109 @@ while True:
         line_thickness=4,
     )
 
-    # All the results have been drawn on the frame, so it's time to display it.
-    cv2.imshow('ID CARD DETECTOR', frame)
+    # Build snapshot panel (top 9 detections by score)
+    h, w = frame.shape[:2]
+    dets = []
+    for i in range(len(boxes)):
+        sc = float(scores[i]) if scores is not None else 1.0
+        if sc < min_score_thresh:
+            continue
+        ymin, xmin, ymax, xmax = boxes[i]
+        x1, y1 = max(0, int(xmin * w)), max(0, int(ymin * h))
+        x2, y2 = min(w, int(xmax * w)), min(h, int(ymax * h))
+        if x2 <= x1 or y2 <= y1:
+            continue
+        crop = frame[y1:y2, x1:x2].copy()
+        dets.append((sc, crop))
+    dets.sort(key=lambda t: t[0], reverse=True)
+    dets = dets[:9]
 
-    # Press 'q' to quit
-    if cv2.waitKey(1) == ord('q'):
+    panel = None
+    thumb_w, thumb_h = 200, 120
+    margin = 8
+    if dets:
+        tiles = []
+        for idx, (sc, crop) in enumerate(dets, start=1):
+            if crop.size == 0:
+                continue
+            t = cv2.resize(crop, (thumb_w, thumb_h))
+            header = np.full((24, thumb_w, 3), 230, dtype=np.uint8)
+            label = f"{idx}: {int(sc*100)}%"
+            cv2.putText(header, label, (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+            tile = np.vstack([header, t])
+            tiles.append(tile)
+        if tiles:
+            blocks = []
+            for i, tile in enumerate(tiles):
+                if i > 0:
+                    blocks.append(np.full((margin, thumb_w, 3), 255, dtype=np.uint8))
+                blocks.append(tile)
+            panel = np.vstack(blocks)
+    else:
+        panel = np.full((thumb_h+24, thumb_w, 3), 245, dtype=np.uint8)
+        cv2.putText(panel, 'No detections', (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), 1)
+
+    # Append OCR text area beneath thumbnails if available
+    if ocr_text_lines:
+        text_h = 28 + 22 * len(ocr_text_lines)
+        text_canvas = np.full((text_h, panel.shape[1], 3), 250, dtype=np.uint8)
+        cv2.putText(text_canvas, 'OCR Result:', (6, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 1)
+        y = 44
+        for line in ocr_text_lines[:10]:
+            cv2.putText(text_canvas, str(line), (6, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0,0,0), 1)
+            y += 22
+        panel = np.vstack([panel, np.full((margin, panel.shape[1], 3), 255, dtype=np.uint8), text_canvas])
+
+    # Compose side-by-side view (resize panel to match frame height)
+    if panel is not None:
+        scale = frame.shape[0] / panel.shape[0]
+        new_w = max(1, int(panel.shape[1] * scale))
+        panel = cv2.resize(panel, (new_w, frame.shape[0]))
+        composed = np.hstack([frame, panel])
+        hud = composed
+    else:
+        hud = frame
+
+    # HUD: controls helper
+    cv2.putText(hud, 'q: quit  p: pause/resume  s: stop camera  b: start camera  1-9: OCR',
+                (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 3)
+    cv2.putText(hud, 'q: quit  p: pause/resume  s: stop camera  b: start camera  1-9: OCR',
+                (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
+    if is_paused:
+        cv2.putText(hud, 'PAUSED', (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+
+    cv2.imshow('ID CARD DETECTOR', hud)
+
+    key = cv2.waitKey(1) & 0xFF
+    if args.ocr and dets and key in [ord(str(d)) for d in range(1, 10)]:
+        try:
+            sel = int(chr(key)) - 1
+            _, crop = dets[sel]
+            import easyocr
+            reader = easyocr.Reader(['tr', 'en'], gpu=False)
+            result = reader.readtext(crop, detail=0)
+            print('\n[OCR {}]'.format(sel+1))
+            for line in result:
+                print(line)
+            ocr_text_lines = result if isinstance(result, list) else [str(result)]
+        except Exception as e:
+            print('OCR error:', e)
+            ocr_text_lines = ['OCR error: {}'.format(e)]
+    # pause/resume
+    if key == ord('p'):
+        is_paused = not is_paused
+    # stop camera
+    if key == ord('s'):
+        if video is not None:
+            close_camera(video)
+            video = None
+            is_paused = True
+    # (re)start camera
+    if key == ord('b'):
+        if video is None:
+            video = open_camera(args.camera)
+            is_paused = False
+    if key == ord('q'):
         break
 
 # Clean up

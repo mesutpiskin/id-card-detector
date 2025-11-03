@@ -39,7 +39,7 @@ This project has been refreshed after 7+ years. It now uses TensorFlow 2 (SavedM
 
 ## Setup and Run (Recommended TF2 + OCR)
 
-Install either a single platform-specific requirements file (includes TensorFlow), or install TensorFlow separately plus `requirements-modern.txt`.
+Install either a single platform-specific requirements file (includes TensorFlow), or install TensorFlow separately plus `requirements-modern.txt`. YOLO is optional and can be installed with `ultralytics`.
 
 ### Option A) One-shot install (recommended)
 
@@ -89,6 +89,56 @@ python3 id_card_detection_image.py --image /absolute/or/relative/path.jpg --ocr 
 - Windows example path: `C:\\path\\to\\image.jpg`
 - Cropped ROI is written as `output_cropped.png` at project root.
 - With `--ocr`, extracted text lines are printed to the terminal.
+
+### YOLO integration (optional)
+
+Install YOLO backend:
+```bash
+pip3 install ultralytics
+```
+
+Run with YOLO instead of TF2 (image):
+```bash
+python3 id_card_detection_image.py --image /path/to/img.jpg --yolo_model yolov8n.pt --min_score 0.4 --ocr
+```
+
+Run with YOLO (camera) and enable OCR snapshot panel (keys 1–9 to OCR selected crop):
+```bash
+python3 id_card_detection_camera.py --yolo_model yolov8n.pt --min_score 0.4 --ocr
+```
+
+Camera window controls: q quit, p pause/resume, s stop camera, b start camera, 1–9 OCR selected snapshot.
+
+## Command-line Arguments
+
+Image script (`id_card_detection_image.py`):
+
+- `--image` (string): Absolute or relative path to the image file. If omitted, defaults to `test_images/image1.png`.
+- `--min_score` (float, default 0.60): Minimum confidence score threshold in [0,1] to visualize and crop detections. Lower it (e.g., 0.3–0.5) to see more candidates.
+- `--ocr` (flag): If provided, runs EasyOCR on the cropped ROI and prints extracted text lines to the terminal.
+- `--yolo_model` (string, optional): If provided, switches detector backend to YOLO. Accepts a local `.pt` path or a model name like `yolov8n.pt`. If omitted, TF2 SavedModel in `model/saved_model/` is used.
+
+Camera script (`id_card_detection_camera.py`):
+
+- `--camera` (int, default 0): Video device index. Try 1 or 2 if you have multiple cameras.
+- `--min_score` (float, default 0.50): Minimum confidence score threshold for drawing detections and listing snapshots.
+- `--yolo_model` (string, optional): YOLO model path/name, same behavior as in the image script.
+- `--ocr` (flag): Enables the OCR workflow on detected snapshots. When enabled:
+  - The right panel shows up to 9 cropped detections sorted by score.
+  - Press number keys 1–9 to run OCR on the corresponding crop; results are shown under “OCR Result” in the right panel and printed to terminal.
+
+Window hotkeys (camera):
+
+- `q`: Quit.
+- `p`: Pause/Resume the live feed (freezes on the last frame when paused).
+- `s`: Stop (release) the camera device.
+- `b`: Start/restart the camera device.
+- `1–9`: Run OCR on the Nth snapshot in the right panel (only if `--ocr` was provided).
+
+Outputs:
+
+- Image script: draws boxes on the image window and saves the best ROI as `output_cropped.png` (project root). OCR text lines print to terminal.
+- Camera script: draws boxes over the live feed; right panel lists thumbnails and shows OCR results if `--ocr` is enabled.
 
 ## Alternative: Legacy TF1 Flow
 

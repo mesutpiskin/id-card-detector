@@ -54,6 +54,56 @@ python3 id_card_detection_image.py --image /mutlak/veya/goreli/yol.jpg --ocr --m
 - Kırpılan ROI proje kökünde `output_cropped.png` olarak kaydedilir.
 - `--ocr` ile metinler terminale yazdırılır.
 
+### YOLO entegrasyonu (opsiyonel)
+
+YOLO arka ucunu kur:
+```bash
+pip3 install ultralytics
+```
+
+TF2 yerine YOLO ile (görsel):
+```bash
+python3 id_card_detection_image.py --image /yol/gorsel.jpg --yolo_model yolov8n.pt --min_score 0.4 --ocr
+```
+
+YOLO ile kamera ve OCR snapshot paneli (1–9 ile seçip OCR):
+```bash
+python3 id_card_detection_camera.py --yolo_model yolov8n.pt --min_score 0.4 --ocr
+```
+
+Kamera kısayolları: q çıkış, p duraklat/devam, s kamera durdur, b başlat, 1–9 seçili kırpımda OCR.
+
+## Komut Satırı Parametreleri
+
+Görsel scripti (`id_card_detection_image.py`):
+
+- `--image` (string): Görsel dosya yolu (mutlak/göreli). Verilmezse `test_images/image1.png` kullanılır.
+- `--min_score` (float, varsayılan 0.60): [0,1] aralığında güven skoru eşiği. Kutuların çizilmesi ve kırpılacak ROI için kullanılır. Daha fazla aday görmek için 0.3–0.5 aralığı denenebilir.
+- `--ocr` (bayrak): Verilirse kırpılmış ROI üzerinde EasyOCR çalıştırılır ve çıkan metin satırları terminale yazdırılır.
+- `--yolo_model` (string, opsiyonel): Verilirse dedektör arka ucu YOLO’ya alınır. Yerel `.pt` yolu veya `yolov8n.pt` gibi bir model adı kabul eder. Verilmezse `model/saved_model/` altındaki TF2 SavedModel kullanılır.
+
+Kamera scripti (`id_card_detection_camera.py`):
+
+- `--camera` (int, varsayılan 0): Kamera cihaz indeksi. Birden fazla kamera varsa 1 veya 2’yi deneyin.
+- `--min_score` (float, varsayılan 0.50): Tespitlerin çizimi ve snapshot listelenmesi için skor eşiği.
+- `--yolo_model` (string, opsiyonel): YOLO model yolu/adı; görsel scripttekiyle aynı davranır.
+- `--ocr` (bayrak): OCR iş akışını etkinleştirir. Etkin olduğunda:
+  - Sağ panelde skora göre sıralı en fazla 9 kırpım gösterilir.
+  - Klavyeden 1–9’a basıldığında ilgili kırpımda OCR çalışır; sonuçlar sağ panelde “OCR Result” altında ve terminalde gösterilir.
+
+Pencere kısayolları (kamera):
+
+- `q`: Çıkış.
+- `p`: Duraklat/Devam (duraklatıldığında son kare sabit kalır).
+- `s`: Kamerayı durdur (release).
+- `b`: Kamerayı başlat/yeniden başlat.
+- `1–9`: Sağ paneldeki N’inci snapshot’ta OCR çalıştır (sadece `--ocr` verildiyse).
+
+Çıktılar:
+
+- Görsel scripti: Görselde kutular çizilir ve en iyi ROI `output_cropped.png` olarak kaydedilir. OCR metni terminale yazdırılır.
+- Kamera scripti: Canlı akış üzerinde kutular çizilir; sağ panelde küçük önizlemeler ve (etkinse) OCR sonuçları yer alır.
+
 ## Alternatif: Eski TF1 Akışı
 
 Python 3.7 ve TensorFlow 1.15 gerektirir. Modern sistemlerde kurulumu zordur.
